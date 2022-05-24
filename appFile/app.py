@@ -1,68 +1,21 @@
 from flask import Flask, json,jsonify,request
-from flask_sqlalchemy import SQLAlchemy
-from marshmallow import Schema,fields
 from datetime import datetime
+import sys
+sys.path.insert(0,"..")
+from appFile.UrlSchema import UrlSchema
+from appFile.Urls import *
 
-app=Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"]='postgresql://postgres:potterdursley@127.0.0.1/URL_DATABASE'
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"]=False
-
-
-db=SQLAlchemy(app)
-
-
-class Urls(db.Model):
-    id = db.Column(db.Integer(), primary_key=True)
-    url = db.Column(db.String(255), nullable=False)
-    status_code = db.Column(db.Integer(), nullable=True)
-    last_update = db.Column(db.DateTime(), nullable=True)
-
-    def __int__(self, id, url, status_code, last_update):
-        self.id = id
-        self.url = url
-        self.status_code = status_code
-        self.last_update = last_update
-
-    def __repr__(self):
-        return self.id
-
-    @classmethod
-    def get_all(cls):
-        return cls.query.all()
-
-    @classmethod
-    def get_by_id(cls,id):
-        return cls.query.get_or_404(id)
-
-    @classmethod
-    def get_if_test(cls):
-        lst = cls.query.all()
-        return list(filter(lambda k: 'test' in k.url, lst))
-
-    @classmethod
-    def get_if_no_status(cls):
-        lst = cls.query.all()
-        return list(filter(lambda k: k.status_code is None, lst))
-
-    def save(self):
-        db.session.add(self)
-        db.session.commit()
-
-    def delete(self):
-        db.session.delete(self)
-        db.session.commit()
-
-
-class UrlSchema(Schema):
-    id=fields.Integer()
-    url=fields.String()
-    status_code=fields.Integer()
-    last_update=fields.DateTime()
+ID='id'
+URL='url'
+STATUS_CODE='status_code'
 
 
 @app.route('/urls', methods=['GET'])
 def get_all_urls():
-    urls = Urls.get_all()
+    try:
+        urls = Urls.get_all()
+    except Exception as e:
+        return jsonify({"message": "Couldn't find URLs"})
 
     serializer = UrlSchema(many=True)
 
@@ -75,15 +28,18 @@ def get_all_urls():
 
 @app.route('/urls',methods=['POST'])
 def create_a_url():
-    data=request.get_json()
+    try:
+        data=request.get_json()
 
-    new_url=Urls(
-        url=data.get('url'),
-        status_code=data.get('status_code'),
-        last_update=datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    )
+        new_url=Urls(
+            url=data.get(URL),
+            status_code=data.get(STATUS_CODE),
+            last_update=datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        )
+    except Exception as e:
+        return jsonify({"message": "No URL found"})
 
-    new_url.save()
+    new_url.add()
 
     serializer=UrlSchema()
 
@@ -91,12 +47,15 @@ def create_a_url():
 
     return jsonify(
         data
-    ), 201
+    )
 
 
 @app.route('/url/<int:id>',methods=['GET'])
 def get_url(id):
-    url=Urls.get_by_id(id)
+    try:
+        url=Urls.get_by_id(id)
+    except Exception as e:
+        return jsonify({"message": "URL does not exist"})
 
     serializer=UrlSchema()
 
@@ -104,12 +63,15 @@ def get_url(id):
 
     return jsonify(
         data
-    ), 200
+    )
 
 
 @app.route('/urltest',methods=['GET'])
 def get_urls_if_test():
-    urls=Urls.get_if_test()
+    try:
+        urls=Urls.get_if_test()
+    except Exception as e:
+        return jsonify({"message": "Couldn't find Tests"})
 
     serializer=UrlSchema(many=True)
 
@@ -122,7 +84,10 @@ def get_urls_if_test():
 
 @app.route('/urlstatus',methods=['GET'])
 def get_urls_no_status():
-    urls=Urls.get_if_no_status()
+    try:
+        urls=Urls.get_if_no_status()
+    except Exception as e:
+        return jsonify({"message": "Couldn't find status"})
 
     serializer=UrlSchema(many=True)
 
@@ -133,14 +98,16 @@ def get_urls_no_status():
     )
 
 
-@app.route('/url/<int:id>',methods=['PUT'])
-def update_url(id):
-    url_to_update=Urls.get_by_id(id)
+@app.route('/urls',methods=['PUT'])
+def update_url():
+    try:
+        data=request.get_json()
 
-    data=request.get_json()
-
-    url_to_update.status_code=data.get('status_code')
-    url_to_update.last_update=datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        url_to_update = Urls.get_by_id(data.get(ID))
+        url_to_update.status_code=data.get(STATUS_CODE)
+        url_to_update.last_update=datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    except Exception as e:
+        return jsonify({"message": "Couldn't update URL"})
 
     db.session.commit()
 
@@ -148,25 +115,30 @@ def update_url(id):
 
     url_data=serializer.dump(url_to_update)
 
-    return jsonify(url_data), 200
+    return jsonify(url_data)
 
 
 @app.route('/url/<int:id>',methods=['DELETE'])
 def delete_url(id):
-    url_to_delete=Urls.get_by_id(id)
+    try:
+        url_to_delete=Urls.get_by_id(id)
 
-    url_to_delete.delete()
+        url_to_delete.delete()
+    except Exception as e:
+        return jsonify({"message": "Couldn't delete URL"})
 
-    return jsonify({"message":"Deleted"}), 204
+    return jsonify({"message":"Deleted"})
 
 
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({"message":"Resource not found"}), 404
 
+
 @app.errorhandler(500)
 def internal_server(error):
     return jsonify({"message":"There is a problem"}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)

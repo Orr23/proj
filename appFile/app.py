@@ -29,7 +29,7 @@ def get_all_urls():
 @app.route('/urls',methods=['POST'])
 def create_a_url():
     try:
-        data=request.get_json()
+        data = request.get_json()
 
         new_url=Urls(
             url=data.get(URL),
